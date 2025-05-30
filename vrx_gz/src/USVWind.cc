@@ -31,6 +31,17 @@ struct WindObj
 class USVWind::Implementation
 {
 
+  /// \brief Callback function called when receiving a new wind parameters
+  /// via the wind subscription callback.
+  /// \param[in] _wind_params 2D vector where x is for wind mean speed and y for wind direction.
+public: void WindParamsCallback(const msgs::Vector3d &_wind_params);
+
+    /// \brief The topic to set the position of the pinger.
+public: std::string setWindParamsTopicName = "/vrx/debug/set_wind_params";
+
+  /// \brief Mutex to protect the wind params vector.
+public: std::mutex mutex;
+
   /// \brief vector of simple objects effected by the wind
 public:
   std::vector<WindObj> windObjs;
@@ -104,7 +115,22 @@ public:
   /// \def Random generator
 public:
   std::unique_ptr<std::mt19937> randGenerator;
+
 };
+
+//////////////////////////////////////////////////
+void USVWind::Implementation::WindParamsCallback(const msgs::Vector3d &_wind_params)
+{
+  std::lock_guard<std::mutex> lock(this->mutex);
+
+  this->windMeanVelocity = _wind_params.x();
+  double windAngle = _wind_params.y();
+  this->windDirection.X(cos(windAngle * M_PI / 180));
+  this->windDirection.Y(sin(windAngle * M_PI / 180));
+  this->windDirection.Z(0);
+  this->windDirMsg.set_data(windAngle);
+
+}
 
 //////////////////////////////////////////////////
 USVWind::USVWind() : dataPtr(utils::MakeUniqueImpl<Implementation>())
@@ -118,6 +144,11 @@ void USVWind::Configure(const sim::Entity &_entity,
                         sim::EventManager & /*_eventMgr*/)
 {
   sdf::ElementPtr sdf = _sdf->Clone();
+
+  // Subscriber to update the pinger pose.
+  this->dataPtr->node.Subscribe(this->dataPtr->setWindParamsTopicName,
+    &USVWind::Implementation::WindParamsCallback,
+    this->dataPtr.get());
 
   // Retrieve models' parameters from SDF
   if (!sdf->HasElement("wind_obj"))
@@ -309,6 +340,8 @@ void USVWind::PreUpdate(
                            this->dataPtr->filterGain / sqrt(dT.count()) * 
                            randomDist) * dT.count();
   // Current wind velocity
+  std::lock_guard<std::mutex> lock(this->dataPtr->mutex);
+
   double velocity = this->dataPtr->varVel + this->dataPtr->windMeanVelocity;
   msgs::Float windVelMsg;
   windVelMsg.set_data(velocity);

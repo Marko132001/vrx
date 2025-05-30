@@ -420,7 +420,7 @@ void WaveVisualPrivate::OnUpdate()
       sim::asFullPath("materials/textures/skybox_lowres.dds", this->modelPath));
     (*fsParams)["cubeMap"].SetTexture(cubeMapPath,
         rendering::ShaderParam::ParamType::PARAM_TEXTURE_CUBE, 1u);
-    this->paramsSet = true;
+    //this->paramsSet = true;
   }
 
   // time variables need to be updated every iteration
